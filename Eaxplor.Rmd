@@ -1,0 +1,664 @@
+---
+title: "Eaxplor:Visual Data Summary and statistical assumption check results from Rmarkdown"
+author: "Chenghuiyun Xu,Danni Wu, Ji-Eun Park"
+date: "3/7/2018"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(rlang)
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+library(cowplot)
+library(gridExtra)
+library(nortest)
+library(MASS)
+library(car)
+library(knitr)
+```
+
+#Abstract
+
+Eaxplor is an R package that generates visual data summary and statistical assumption checking tools. Unlike other summary tools such as stargazer or xtable the tables and plots can be directly knitted into Word file, PDF, or html from an Rmarkdown file. This is to make the functions used directly when producing a scientific research paper without the need to use latex codes. Currently, numerical summary, categorical summary(Contingency table), graphical summary(error-bar plot, boxplot), assumption checking with plots(QQ-plot, histogram, residual plot, residual-covariate plot, cook's distance plot, influence point plot, DFBETA plot ) and assumption checking with tests(Score test, Shapiro's test, Bartlett’s test, Durbin-Watson Test) are supported in the Eaxplor package.
+
+
+#Keywords: 
+
+visual data summary, assumption test, R markdown.
+
+#Introduction
+
+Tukey (1977) stated that “Exploratory data analysis is detective work – numerical detective work or counting detective work or graphical detective work.” We call this process “visual data summary” which includes numerical and graphical data summary. Visual data summary plays a crucial role at the in the exploratory data analysis stage as producing a clear and precise summaries are important in giving the readers a clear picture of the data. However, although R is the most commonly used program used for statistical analysis, there were no distinct package that allows the researchers, analysts etc. to directly generate their analysis in a clear format from an Rmd file. The objective of this package is to create a convenient tool to help generate the result.
+
+##Neat tables directly knitted with Eaxplor
+
+There are existing packages specified for generating summary tables. Stargazer is one of the successful implementations of generate neat tables, it produces LaTeX code, HTML/CSS code and ASCII text for well-formatted tables that hold regression analysis results from several models side-by-side, as well as summary statistics. However, there is a barrier for users who are unfamiliar with LaTeX. 
+
+```{r,echo=FALSE}
+a <- c('','','Provide')
+b <- c('Provide','Provide','')
+d <- rbind(a,a,a,a,b,a,a)
+rownames(d) <- c("HTML output", "Word output","PDF output","Output color change"," Output LaTeX code","Assumption test","Selective output plot")
+colnames(d) <-c("stargazer","xtable","Eaxplore")
+knitr::kable(d,align='c',caption="Comparison of packages")
+```
+
+
+##Set of exploratory plots all together
+Generating a graphical summaries is sometimes time-consuming for the users when they are unfamiliar with the elements of ggplot2 or even basic plots in R. The graphical summary code in Eaxplor allows the user to easily generate widely used graphical summaries by using only data and variable names. Also, plot assumption check code allows the user to easily choose within a set of widely used plots used to checking assumptions. This can help the time-efficiency as there is no need to look up what assumptions can be used every time.
+
+##Assumption checking with results included
+Assumption checking is one of the most important parts of the exploratory analysis step. However, it can be quite confusing when the assumptions hold or not hold from assumption tests such as Bartlett’s test or Shapiro’s test. The assumption test checking function in Eaxplor allows the user to generate both the p-value and whether the assumptions hold or not in a neat table. The aim is to make the analysis process more convenient for the researchers. We would like to improve the package capabilities by including more assumption test function in a future release. 
+
+##Required libraries
+Table 2: Package dependencies of Eaxplor
+```{r,echo=FALSE}
+a <- ('A coherent system of packages for data manipulation, exploration and visualization')
+b <- ('Allows users to construct complex tables and customize styles using a readable syntax')
+d <- ('Generating basic statistical plots')
+e <- ('Provide a publication-ready theme for ggplot2')
+f <- ('Arrange multiple grid-based plots on a page, and draw tables')
+g <- ('A toolbox for working with base types')
+h <- ('Tests for testing the composite hypothesis of normality')
+i <- ('Functions and datasets to support Venables and Ripley')
+j <- ('An R Companion to Applied Regression')
+z <- rbind(a,b,d,e,f,g,h,i,j)
+rownames(z) <- c("tidyverse","kableExtra","ggplot2","cowplot","gridExtra","rlang","nortest","MASS","car")
+knitr::kable(z,align='c',caption="Package dependencies of Eaxplore")
+```
+
+The dependencies of Eaxplore on other packages are listed in Table 2. The rest of this paper illustrates the details of the Eaxplore package.
+
+#Example
+
+In the lines following the commands, Eaxplor provides a sample dataset for demonstration and illustration of the package.
+
+
+#Nummerical Summary for continuous variable
+
+First, to generate numerical summary table of a continuous variable for each level of a factor variable.
+
+```{r,echo=FALSE}
+exp_ntable <- function(data,x,y,pval=c("none","anova","kw","both")) {
+  pval <- match.arg(pval)
+
+
+  if (is.null(levels(x))) {
+    warning("x should be a factor")
+  }
+
+  else{
+    pround <- function(p.val) {
+      if(p.val < 0.001) p.txt <- "p<0.001"
+      else if(p.val < 0.01) p.txt <- paste("p=",format(p.val, digits=2))
+      else p.txt <- paste("p=",format(p.val, digits=3))
+      p.txt
+    }
+
+    xvar <- as.character(deparse(substitute(x)))
+    yvar <- as.character(deparse(substitute(y)))
+    bio_x <- gsub(".*\\$","",xvar)
+    bio_y <- gsub(".*\\$","",yvar)
+
+    fsmry_y <- function(y){
+      out <- data.frame(n = length(y),
+                        n.complete = length(y[!is.na(y)]),
+                        mean = mean(y, na.rm=T),
+                        sd = sd(y, na.rm=T),
+                        median = median(y,na.rm=T),
+                        Q1 = quantile(y,0.25),
+                        Q3 = quantile(y,0.75))
+      return(out)
+    }
+
+    fsmry_by_grp <- function(x, y){
+
+      x <- factor(x)
+
+      smry <- tapply(y, x, fsmry_y)
+      smry <- do.call(rbind, smry)
+      return(smry)
+    }
+
+
+    summ <- fsmry_by_grp(x, y)
+    summ$group <- levels(x)
+
+    kw <- function(x,y){
+      k <- kruskal.test(y~x)$p.value
+      pround(k)
+    }
+
+
+    lmp <- function (x,y) {
+      model <- lm(y~x)
+      p <- anova(model)$`Pr(>F)`[1]
+      pround(p)
+    }
+
+    kw <- function(x,y){
+      k <- kruskal.test(y~x)$p.value
+      pround(k)
+    }
+
+
+    lmp <- function (x,y) {
+      model <- lm(y~x)
+      p <- anova(model)$`Pr(>F)`[1]
+      pround(p)
+    }
+
+    if (pval == "none"){
+      out <- data.frame(summ[,1:2],
+                        mean.sd = paste0(format(summ$mean, digits=3),
+                                         " +/- ",
+                                         format(summ$sd, digits=3)),
+                        median.iqr = paste0(format(summ$median,digits=3),
+                                            "(",
+                                            format(summ$Q1,digits=3),
+                                            ",",
+                                            format(summ$Q3,digits=3),
+                                            ")"))
+      names(out)[3] <- "mean +/- sd"
+      names(out)[4] <- "median (IQR)"
+      knitr::kable(out,align="c",caption=paste0("Summary of ", bio_y ," for ", bio_x))
+    }
+
+    else if (pval == "both")  {
+      out <- data.frame(summ[,1:2],
+                        mean.sd = paste0(format(summ$mean, digits=3),
+                                         " +/- ",
+                                         format(summ$sd, digits=3)),
+                        p.anova=c(replicate(nrow(summ)-1,""), lmp(x,y)),
+                        median.iqr = paste0(format(summ$median,digits=3),
+                                            "(",
+                                            format(summ$Q1,digits=3),
+                                            ",",
+                                            format(summ$Q3,digits=3),
+                                            ")"),
+                        p.kw=c(replicate(nrow(summ)-1,""),kw(x,y)))
+
+      names(out)[3] <- "mean +/- sd"
+      names(out)[5] <- "median (IQR)"
+      knitr::kable(out,align="c",caption=paste0("Summary of ", bio_y ," for ", bio_x))
+    }
+
+    else if (pval == "anova") {
+      out <- data.frame(summ[,1:2],
+                        mean.sd = paste0(format(summ$mean, digits=3),
+                                         " +/- ",
+                                         format(summ$sd, digits=3)),
+                        p.anova=c(replicate(nrow(summ)-1,""), lmp(x,y)),
+                        median.iqr = paste0(format(summ$median,digits=3),
+                                            "(",
+                                            format(summ$Q1,digits=3),
+                                            ",",
+                                            format(summ$Q3,digits=3),
+                                            ")"))
+      names(out)[3] <- "mean +/- sd"
+      names(out)[5] <- "median (IQR)"
+      knitr::kable(out,align="c",caption=paste0("Summary of ", bio_y ," for ", bio_x))
+    }
+
+    else if (pval == "kw"){
+      out <- data.frame(summ[,1:2],
+                        mean.sd = paste0(format(summ$mean, digits=3),
+                                         " +/- ",
+                                         format(summ$sd, digits=3)),
+                        median.iqr = paste0(format(summ$median,digits=3),
+                                            "(",
+                                            format(summ$Q1,digits=3),
+                                            ",",
+                                            format(summ$Q3,digits=3),
+                                            ")"),
+                        p.kw=c(replicate(nrow(summ)-1,""),kw(x,y)))
+
+
+      names(out)[3] <- "mean +/- sd"
+      names(out)[4] <- "median (IQR)"
+      knitr::kable(out,align="c",caption=paste0("Summary of ", bio_y ," for ", bio_x))
+    }
+  }
+}
+
+```
+
+```{r}
+exp_ntable(esoph, esoph$agegp, esoph$ncontrols, pval = "none")
+```
+
+A summary of the the number of controls(ncontrols) for each age gap(agegp) will be summarized including the number of observations, complete number of observations, the mean +/- standard deviation(sd), median(IQR). 
+
+In addition, as there are many cases where in research papers where checking the difference within factor levels are needed, either the p-value of the type-one ANOVA test and Kruskal-Wallis test result can be added to the table. Here is an example where you can add both of the p-values.
+
+```{r}
+exp_ntable(esoph, esoph$agegp, esoph$ncontrols,pval="both")
+```
+
+The output table including the number of observations, complete cases, mean, standard deviation, the p-value of anova and Kruskal-Wallis test.
+
+#Nummerical Summary for categorical variable
+
+For categorical variables, the exp_ctable() function can generate contingency table.
+```{r,echo=FALSE}
+exp_ctable <- function(data,x,y){
+  if (!is.null(levels(x)) & !is.null(levels(y))) {
+  # Generate cell count
+  mytable <- table(x,y)
+
+  ## Generate cell proportion of row
+  CPR <- format(prop.table(mytable, 1),digits=1)
+
+  ## Generate cell proportion of col
+  CPC <- format(prop.table(mytable, 2),digits=1)
+
+  ## Generate cell proportion of total
+  CPT <- format(prop.table(mytable),digits=1)
+
+  ## Number of unique levels of x
+  nx <-as.numeric(length(unique(x)))
+  ny <- as.numeric(length(unique(y)))
+  ## Generate a matrix with NAs with needed nrow*ncol
+  result <- matrix(nrow=nx,ncol=ny)
+
+  ## Add values in each cell
+
+  for(i in 1:nx) {
+    for(j in 1:ny) {
+      result[i,j] <- paste0(mytable[i,j],"(",CPR[i,j],",",CPC[i,j],",",CPT[i,j],")")
+    }
+  }
+
+  result <- as.data.frame(result)
+  ## Change colnames, change rownames
+  for (i in 1:ncol(mytable)) {
+    colnames(result)[i] <- colnames(mytable)[i]
+  }
+
+  for (i in 1:nrow(mytable)) {
+    rownames(result)[i] <- rownames(mytable)[i]
+  }
+
+  ## Add footnote explaining the cell values mean cellcount(rowperc,colperc,totalperc)
+  kablet <- knitr::kable(result)
+  add_footnote(kablet,c("Cell count(row proportion,column proportion,overall proportion)"))
+  }
+  else {
+    warning("both variables should be factors")
+  }
+}
+
+```
+
+```{r}
+exp_ctable(esoph,esoph$agegp, esoph$alcgp)
+```
+
+The output includes a contingency table which for each cell is composed with the frequency and row proportion, column proportion, overall proportion in a parentheses. A footnote is added in the bottom of the table for explanation of the cells. The row names and the column names can be changed if the user manually edits the names of the levels of each factor variable. 
+
+#Graphical Summary
+
+Graphical summary function in the package includes two possible plots: error-bar plot and boxplot. The titles of the plots and the p-values of each.
+
+To make our package more user-friendly, we add some options for the plot function, the user can choose between which plot they want (like only barplot, or boxplot, or both). Also, as we know, researchers prefer monotonous graph while the others like commercial institution prefer more fancy graph for presentation. In our package, the user can choose between monotonous graph and colorful graph.
+
+```{r,echo=FALSE}
+exp_plots <- function(data,x,y,alternative=c("both","barplot","boxplot"),colors=c("color","mono"),bio=bio_y,legend_title=bio_x,legend_labels=label_default,...) {
+  alternative <- match.arg(alternative)
+  colors <- match.arg(colors)
+
+  pround <- function(p.val) {
+    if(p.val < 0.001) p.txt <- "p<0.001"
+    else if(p.val < 0.01) p.txt <- paste("p=",format(p.val, digits=2))
+    else p.txt <- paste("p=",format(p.val, digits=3))
+    p.txt
+  }
+
+  xvar <- as.character(deparse(substitute(x)))
+  yvar <- as.character(deparse(substitute(y)))
+  bio_x <- gsub(".*\\$","",xvar)
+  bio_y <- gsub(".*\\$","",yvar)
+
+  fsmry_y <- function(y){
+    out <- data.frame(n = length(y),
+                      n.complete = length(y[!is.na(y)]),
+                      mean = mean(y, na.rm=T),
+                      sd = sd(y, na.rm=T),
+                      median = median(y,na.rm=T),
+                      Q1 = quantile(y,0.25),
+                      Q3 = quantile(y,0.75))
+    return(out)
+  }
+
+  fsmry_by_grp <- function(x, y){
+
+    x <- factor(x)
+
+    smry <- tapply(y, x, fsmry_y)
+    smry <- do.call(rbind, smry)
+    return(smry)
+  }
+
+
+  smry <- fsmry_by_grp(x, y)
+
+  kw <- function(x,y){
+    k <- kruskal.test(y~x)$p.value
+    pround(k)
+  }
+
+
+  lmp <- function (x,y) {
+    model <- lm(y~x)
+    p <- anova(model)$`Pr(>F)`[1]
+    pround(p)
+  }
+
+  smry$factor <-levels(x)
+  as.data.frame(smry)
+
+
+  label_default <- levels(x)
+
+  if (alternative=="both" & colors == "color") {
+    barplot <-  ggplot(smry,aes(x = factor, y= mean,group=factor,fill=factor)) +
+      geom_col() +
+      geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd,width = 0.2)) +
+      theme_bw() +
+      labs(title = paste0("Errorbar plots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = lmp(x,y) , vjust=1, hjust=1) +
+      scale_fill_discrete(name = legend_title,breaks=label_default,labels=legend_labels)
+
+    boxplot <-ggplot(data,aes(x=x, y=y,fill = x)) +
+      geom_boxplot() +
+      theme_bw() +
+      labs(title = paste0("Boxplots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = kw(x,y), vjust=1, hjust=1) +
+      scale_fill_discrete(name = legend_title,breaks=label_default,labels=legend_labels)
+
+    plot_grid(barplot, boxplot, ncol = 2, align = 'v')
+  }
+
+  else if (alternative=="both" & colors == "mono") {
+    barplot <- ggplot(smry,aes(x = factor, y= mean,group=factor,fill=factor)) +
+      geom_col() +
+      geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd,width = 0.2))+
+      theme_bw() +
+      labs(title = paste0("Errorbar plots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = lmp(x,y) , vjust=1, hjust=1) +
+      scale_fill_manual(name = legend_title,values=rep("gray56",length(label_default)),breaks=label_default,labels=legend_labels)
+
+    boxplot <-ggplot(data,aes(x=x, y=y,fill = x)) +
+      geom_boxplot() +
+      theme_bw() +
+      labs(title = paste0("Boxplots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = kw(x,y), vjust=1, hjust=1) +
+      scale_fill_manual(name = legend_title,values=rep("gray56",length(label_default)),breaks=label_default,labels=legend_labels)
+
+    plot_grid(barplot, boxplot, ncol = 2, align = 'v')
+  }
+
+
+  else if (alternative=="barplot" & colors == "color") {
+    ggplot(smry,aes(x = factor, y= mean,group=factor,fill=factor)) +
+      geom_col() +
+      geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd,width = 0.2))+
+      theme_bw() +
+      labs(title = paste0("Errorbar plots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = lmp(x,y) , vjust=1, hjust=1)+
+      scale_fill_discrete(name = legend_title,breaks=label_default,labels=legend_labels)
+  }
+
+  else if (alternative=="barplot" & colors == "mono"){
+    ggplot(smry,aes(x = factor, y= mean,group=factor,fill=factor)) +
+      geom_col() +
+      geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd,width = 0.2))+
+      theme_bw() +
+      labs(title = paste0("Errorbar plots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = lmp(x,y) , vjust=1, hjust=1)+
+      scale_fill_manual(name = legend_title,values=rep("gray56",length(label_default)),breaks=label_default,labels=legend_labels)
+  }
+
+  else if (alternative=="boxplot" & colors == "color"){
+    ggplot(data,aes(x=x, y=y,fill=x)) +
+      geom_boxplot() +
+      theme_bw() +
+      labs(title = paste0("Boxplots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = kw(x,y), vjust=1, hjust=1)+
+      scale_fill_discrete(name = legend_title,breaks=label_default,labels=legend_labels)
+  }
+
+  else {
+    ggplot(data,aes(x=x, y=y,fill=x)) +
+      geom_boxplot() +
+      theme_bw() +
+      labs(title = paste0("Boxplots of\n",bio), y= bio) +
+      annotate("text",  x=Inf, y = Inf, label = kw(x,y), vjust=1, hjust=1)+
+      scale_fill_manual(name = legend_title,values=rep("gray56",length(label_default)),breaks=label_default,labels=legend_labels)
+  }
+}
+
+```
+
+```{r,echo=FALSE, fig.width=8}
+exp_plots(esoph, esoph$agegp, esoph$ncontrols,alternative="both",color="color")
+```
+
+There are several options that can be added to allow the user to adjust the plot results to their own preferences. First, by default the function will output both bar plot and box plot, but you can choose either plot by specifying it in the code(like alternative="barplot" or "boxplot") . Also, as we know, some researchers prefer monotonous graph while the others like commercial institution prefer more fancy graph for presentation. In our package, the user can choose between monotonous graph and colorful graph. Default is set to colorful graphs.
+
+```{r, echo=FALSE, fig.width=8}
+exp_plots(esoph, esoph$agegp, esoph$ncontrols,alternative="barplot",color="mono",bio="number of controls",legend_title = "age")
+```
+
+#Assumption Checking
+
+```{r,echo=FALSE,fig.height=8, fig.width=8}
+exp_plotcheck <- function (data,x,y,bio=bio_def,plot=c("normality", "res","rc", "ip")) {
+  data <- data %>% filter(complete.cases(data))
+
+  bio_def <- as.character(deparse(substitute(title)))
+  plot <- match.arg(plot)
+
+  pround <- function(p.val) {
+    if(p.val < 0.001) p.txt <- "p<0.001"
+    else if(p.val < 0.01) p.txt <- paste("p=",format(p.val, digits=2))
+    else p.txt <- paste("p=",format(p.val, digits=3))
+    p.txt
+  }
+
+  data <- data %>%
+    filter(complete.cases(data))
+
+  #heteroscedasticity
+  mod1 <- lm(y ~ x, data=data)
+  summ1 <- summary(mod1)
+  res <- resid(mod1)
+  s.res <- studres(mod1)
+  n <- nrow(data)
+
+  if (plot=="normality") {
+  par(mfrow = c(3,1))
+  norm.p <- qqnorm(mod1$res, pch = 19, cex = 0.5,main = paste0("QQ-plot of\n",bio));qqline(mod1$res)
+  hist <- hist(s.res, prob=TRUE, las=2, col="grey",main = paste0("Histogram of\n",bio))
+  box <- boxplot(x, main = paste0("Boxplot of\n",bio))
+  }
+
+  else if (plot=="ip") {
+    par(mfrow=c(3,1))
+    cutoff <- 4/(nrow(data)-1-length(mod1$coefficients)-1)
+    cd <- plot(mod1, which = 4, cook.levels = cutoff, main = paste0("Cook's D of ",bio))
+    i <- influencePlot(mod1, id.method = "identity",main = paste0("Influencital plot of\n",bio))
+    df <- plot(dfbetas(mod1)[,2], ylim=c(-0.5,0.5), pch=19, cex=0.5,main = paste0("DFBETA plot of\n",bio));abline(h=0, col="red");abline(h=0.2, col="red");abline(h=-0.2, col="red")
+  }
+
+  else if (plot=="rc") {
+    plot(x, res, main = paste0('Residuals vs ',bio))
+    abline(0, 0)
+    lines(loess.smooth(x, res), col = 'red')
+  }
+
+  else if (plot=="res") {
+    par(mfrow = c(2, 1))
+    res.p <- plot(mod1$fit, mod1$res, xlab = "Fitted Values", ylab = "Residuals", pch = 19, cex = 0.5,main = paste0("Residuals' plot of\n",bio))
+    s.res.p <- plot(mod1$fit, mod1$s.res, xlab = "Fitted Values", ylab = "Studentized Residuals", pch = 19, cex = 0.5, main = paste0("Studentized Residuals' plot of\n",bio))
+  }
+}
+
+
+exp_plotcheck(esoph,esoph$agegp,esoph$ncontrols,plot="ip", bio="Agegp")
+```
+
+In this function, users can generate in total 9 different plots for assumption checking purpose. The plot options in the code are "normality", "ip", "rc" and "res". For option "normality", qq-plot, histogram and boxplot can be generated; for option "ip", Cook's D plot, DFBETA plot and Influencital plot can be shown; for option "rc", the residual-covariate plot can be generated; and for option "res", the residual and studentized residual plot can be generated (as in the example above). The users can also change the title of each plot by typing in the name of the variable they want to use. 
+
+The function exp_testcheck provides choices for generating test results and notes to show if the specific assumptions hold on the 5% significance level:
+
+
+```{r,echo=FALSE}
+exp_testcheck <- function (data,x,y,test=c("Score", "Shapiro", "Bartlett", "DurbinWatson")) {
+
+  data <- data %>% filter(complete.cases(data))
+
+  xvar <- as.character(deparse(substitute(x)))
+  yvar <- as.character(deparse(substitute(y)))
+
+  test <- match.arg(test)
+
+
+  pround <- function(p.val) {
+    if(p.val < 0.001) p.txt <- "p < 0.001"
+    else if(p.val < 0.01) p.txt <- paste("p =",format(p.val, digits=2))
+    else p.txt <- paste("p =",format(p.val, digits=3))
+    p.txt
+  }
+
+  data <- data %>%
+    filter(complete.cases(data))
+
+  #heteroscedasticity
+  mod1 <- lm(y ~ x, data=data)
+  summ1 <- summary(mod1)
+  res <- resid(mod1)
+  n <- nrow(data)
+
+  #nonconstant variance, hypothesis of constant error variance
+  if (test=="Score") {
+    ncv <- ncvTest(mod1)$p
+    if (ncv > 0.05) {
+      ncv <- pround(ncv)
+      d <- "Assumption holds on the 5% significance level."
+    }
+    else {
+      ncv <- pround(ncv)
+      d <- "Assumption does not hold on the 5% significance level."
+    }
+    t <- cbind(ncv, d)
+    colnames(t) <- c("p.Score Test for Non-Constant Error Variance", "Assumption Check Result")
+    knitr::kable(t,align='c',caption="Non-constant variance Test")
+  }
+
+  #test of homogeneity of variances (bartlett test)
+  else if (test=="Bartlett") {
+    if (n < 10) {
+      suppressWarnings("Sample size is too small.")
+    }
+    else {
+      bt <- bartlett.test(y~x, data)$p.value
+      if (bt > 0.05) {
+        bt <- pround(bt)
+        d <- "Assumption holds on the 5% significance level."
+      }
+      else {
+        bt <- pround(bt)
+        d <- "Assumption does not hold on the 5% significance level."
+      }
+      t <- cbind(bt, d)
+      colnames(t) <- c("p.Bartlett", "Assumption Check Result")
+      knitr::kable(t,align='c',caption="Bartlett's Test")
+    }
+  }
+
+  #nonnormality (shapiro test)
+  else if (test=="Shapiro") {
+    if (n < 10) {
+      suppressWarnings("Sample size is too small.")
+    }
+    else {
+      sp <- shapiro.test(mod1$residuals)$p.value
+      if (sp > 0.05) {
+        sp <- pround(sp)
+        d <- "Assumption holds on the 5% significance level."
+      }
+      else {
+        sp <- pround(sp)
+        d <- "Assumption does not hold on the 5% significance level."
+      }
+      t <- cbind(sp, d)
+      colnames(t) <- c("p.Shapiro", "Assumption Check Result")
+      knitr::kable(t,align='c',caption="Shapiro's Test")
+    }
+  }
+
+  #nonindependent error
+  else if (test=="DurbinWatson") {
+    dw <- durbinWatsonTest(mod1)$p
+    if (dw < 0.05) {
+      dw <- pround(dw)
+      d <- "Assumption holds on the 5% significance level."
+    }
+    else {
+      dw <- pround(dw)
+      d <- "Assumption does not hold on the 5% significance level."
+    }
+    t <- cbind(dw, d)
+    colnames(t) <- c("p.DurbinWatson", "Assumption Check Result")
+    knitr::kable(t,align='c',caption="DurbinWatson Test")
+  }
+
+}
+
+
+```
+
+```{r}
+exp_testcheck(esoph, esoph$agegp, esoph$ncontrols, test = "Score")
+```
+
+As you can see in the result, the function generates a table with the result of the Score test p-value. Depending on the test, there will be another column which shows if the assumptions hold under the given p-value and the threshold was set as 0.05. Use of different p-value threshold will be uploaded in future versions of the package.
+
+#Contribution
+```{r}
+m <-rbind(c("ChenghuiyunXu","design package, coding of assumption test, editing vignette and tutorial"),c("Danni Wu","design package, writing vignette and tutorial"),c("Ji Eun Park ","design package, coding of data summary(numeric, graphical), editing vignette and tutorial"))
+knitr::kable(m,align='c',caption="Contribution")
+```
+
+#References
+[1]  R packages written by O\'Reilly in April 2015:
+
+http://r-pkgs.had.co.nz
+
+[2]  Creating an R package for Research documentation:
+
+https://rpubs.com/ndphillips/rpackagescience
+
+[3] The Complete ggplot2 Tutorial:
+
+http://r-statistics.co/Complete-Ggplot2-Tutorial-Part2-Customizing-Theme-With-R-Code.html
+
+[4]Journal of Statistcal Software:
+
+https://www.jstatsoft.org/article/view/v082i06
+
+[5]\"vdmR: Generating Web-Based Visual Data Mining Tools with R
+:https://www.jstatsoft.org/index.php/jss/article/view/v082i06/v82i06.pdf
+
+[6]\"stargazer vignette\":
+
+https://cran.r-project.org/web/packages/stargazer/vignettes/stargazer.pdf
+

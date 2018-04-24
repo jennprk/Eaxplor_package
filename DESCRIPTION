@@ -1,0 +1,21 @@
+Package: Eaxplor
+Type: Package
+Title: Cassie, Jieun, Danni (2018) Data Exploration and Assumption Check
+Version: 0.1.0
+Author: Chenghuiyun(Cassie) Xu, Jieun Park, Danni Wu
+Maintainer: Chenghuiyun(Cassie) Xu, Jieun Park, Danni Wu <chx2006@med.cornell.edu>
+Description: This package includes five functions which allows the users to do data exploration and assumption checks.
+    The function exp_ntable automatically generates a numerical summary table of a continuous variable for each level of a factor variable in the user's dataset (n, mean, median, sd etc.); 
+    the function exp_ctable automatically generates a contingency table of a categorical variable for each level of two factor variables in the user's dataset (cell count, row proportion, column proportion, overall proportion);
+    the function exp_plot generates barplot with error bars and/or boxplot in one grid (users can choose the styles of the plots as well);
+    the function exp_plotcheck generates plots (qq-plot, cook's d plot etc.) the users may need to check assumptions;
+    the function exp_testcheck generates tests (Shapiro's test, Durbin-Watson test etc.) the users may need to check assumptions.
+    Users can type in the variables' names in the functions without assigning the dataset.
+License: NA
+Encoding: UTF-8
+LazyData: true
+Suggests: ggplot2, tidyverse, multcomp, readxl, nortest, MASS, car, cowplot,rlang,kableExtra, gridExtra,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+RoxygenNote: 6.0.1
